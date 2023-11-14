@@ -18,3 +18,5 @@ tokio_wasi = { version = "1.25.0", features = ["fs", "macros"] }
 serde = {version = "1", features = ["derive"]}
 http_req_wasi = "0.11.1"
 web-scraper-flows = "0.1.0"
+flowsnet-platform-sdk = "0.1.6"
+log = "0.4.20"

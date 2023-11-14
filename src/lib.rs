@@ -9,6 +9,7 @@ use async_openai_wasi::{
 };
 use chrono::prelude::*;
 use dotenv::dotenv;
+use flowsnet_platform_sdk::{logger, write_error_log};
 use http_req::{
     request::{Method, Request},
     uri::Uri,
@@ -23,6 +24,7 @@ use web_scraper_flows::get_page_text;
 #[no_mangle]
 #[tokio::main(flavor = "current_thread")]
 async fn run() {
+    logger::init();
     dotenv().ok();
     let slack_workspace = env::var("slack_workspace").unwrap_or("secondstate".to_string());
     let slack_channel = env::var("slack_channel").unwrap_or("test-flow".to_string());
@@ -72,13 +74,13 @@ pub async fn run_gpt(
             .function(
                 ChatCompletionFunctionsArgs::default()
                     .name("getWeather")
-                    .description("Prints hello world with the string passed to it")
+                    .description("Get weather forecast for the city passed to it")
                     .parameters(json!({
                         "type": "object",
                         "properties": {
                             "city": {
                                 "type": "string",
-                                "description": "The string to append to the hello world message",
+                                "description": "The city specified by the user",
                             },
                         },
                         "required": ["city"],
@@ -136,20 +138,33 @@ pub async fn run_gpt(
         .map(|choice| choice.finish_reason == Some(FinishReason::FunctionCall))
         .unwrap_or(false);
 
+    log::info!("wants_to_use_function: {}", wants_to_use_function);
+
     if wants_to_use_function {
         let tool_calls = chat.choices[0].message.tool_calls.as_ref().unwrap();
 
         for tool_call in tool_calls {
             let function = &tool_call.function;
+            let content_str = function.name.clone();
+            log::info!("content_str: {}", content_str);
+
             let content = match function.name.as_str() {
                 "getWeather" => {
                     let argument_obj =
                         serde_json::from_str::<HashMap<String, String>>(&function.arguments)?;
+
+                        let city = &argument_obj["city"];
+                        log::info!("city: {}", city);
+
                     get_weather(&argument_obj["city"].clone())
                 }
                 "scraper" => {
                     let argument_obj =
                         serde_json::from_str::<HashMap<String, String>>(&function.arguments)?;
+
+                        let url = &argument_obj["url"];
+                        log::info!("url: {}", url);
+                        
                     scraper(argument_obj["url"].clone()).await
                 }
                 "getTimeOfDay" => get_time_of_day(),
