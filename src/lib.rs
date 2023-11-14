@@ -44,6 +44,7 @@ async fn handler(workspace: &str, channel: &str, msg: String) {
 
         true => {
             let user_input = msg.replace(&trigger_word, "").to_string();
+            send_message_to_channel(workspace, channel, user_input.clone()).await;
 
             let _ = run_gpt(workspace, channel, user_input).await;
         }
@@ -131,6 +132,17 @@ pub async fn run_gpt(
         .build()?;
 
     let chat = client.chat().create(request).await?;
+
+    let check = chat
+        .choices
+        .clone();
+
+for choice in check {
+    let choice_string = format!("{:?}", choice);
+    log::info!("choice_string: {}", choice_string);
+    log::error!("choice_string: {}", choice_string);
+    send_message_to_channel(workspace, channel, choice_string).await;
+}
 
     let wants_to_use_function = chat
         .choices
