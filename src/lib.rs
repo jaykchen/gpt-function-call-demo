@@ -9,7 +9,7 @@ use async_openai_wasi::{
 };
 use chrono::prelude::*;
 use dotenv::dotenv;
-use flowsnet_platform_sdk::{logger, write_error_log};
+use flowsnet_platform_sdk::logger;
 use http_req::{
     request::{Method, Request},
     uri::Uri,
@@ -130,16 +130,20 @@ pub async fn run_gpt(
         .tools(tools)
         .build()?;
 
-    let chat = client.chat().create(request).await?;
+    let chat = match client.chat().create(request).await {
+        Ok(chat) => chat,
+        Err(e) => {
+            send_message_to_channel(workspace, channel, e.to_string()).await;
+            return Ok(());
+        }
+    };
 
-    let check = chat
-        .choices
-        .clone();
+    let check = chat.choices.clone();
 
-for choice in check {
-    let choice_string = choice.message.content.unwrap_or_default().to_string();
-    send_message_to_channel(workspace, channel, choice_string).await;
-}
+    for choice in check {
+        let choice_string = choice.message.content.unwrap_or_default().to_string();
+        send_message_to_channel(workspace, channel, choice_string).await;
+    }
 
     let wants_to_use_function = chat
         .choices
@@ -155,14 +159,15 @@ for choice in check {
         for tool_call in tool_calls {
             let function = &tool_call.function;
             let content_str = function.name.clone();
-            log::info!("content_str: {}", content_str);
+            send_message_to_channel(workspace, channel, content_str).await;
+
             let content = match function.name.as_str() {
                 "getWeather" => {
                     let argument_obj =
                         serde_json::from_str::<HashMap<String, String>>(&function.arguments)?;
 
-                        let city = &argument_obj["city"];
-                        log::info!("city: {}", city);
+                    let city = &argument_obj["city"];
+                    log::info!("city: {}", city);
 
                     get_weather(&argument_obj["city"].clone())
                 }
@@ -170,9 +175,9 @@ for choice in check {
                     let argument_obj =
                         serde_json::from_str::<HashMap<String, String>>(&function.arguments)?;
 
-                        let url = &argument_obj["url"];
-                        log::info!("url: {}", url);
-                        
+                    let url = &argument_obj["url"];
+                    log::info!("url: {}", url);
+
                     scraper(argument_obj["url"].clone()).await
                 }
                 "getTimeOfDay" => get_time_of_day(),
