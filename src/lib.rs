@@ -125,7 +125,8 @@ pub async fn run_gpt(
 
     let request = CreateChatCompletionRequestArgs::default()
         .max_tokens(512u16)
-        .model("gpt-3.5-turbo-0613")
+        // .model("gpt-3.5-turbo-0613")
+        .model("gpt-3.5-turbo-1106")
         .messages(messages.clone())
         .tools(tools)
         .build()?;
