@@ -44,7 +44,6 @@ async fn handler(workspace: &str, channel: &str, msg: String) {
 
         true => {
             let user_input = msg.replace(&trigger_word, "").to_string();
-            send_message_to_channel(workspace, channel, user_input.clone()).await;
 
             let _ = run_gpt(workspace, channel, user_input).await;
         }
@@ -138,9 +137,7 @@ pub async fn run_gpt(
         .clone();
 
 for choice in check {
-    let choice_string = format!("{:?}", choice);
-    log::info!("choice_string: {}", choice_string);
-    log::error!("choice_string: {}", choice_string);
+    let choice_string = choice.message.content.unwrap_or_default().to_string();
     send_message_to_channel(workspace, channel, choice_string).await;
 }
 
@@ -159,7 +156,6 @@ for choice in check {
             let function = &tool_call.function;
             let content_str = function.name.clone();
             log::info!("content_str: {}", content_str);
-
             let content = match function.name.as_str() {
                 "getWeather" => {
                     let argument_obj =
