@@ -2,8 +2,8 @@ use async_openai::{
     types::{
         ChatCompletionFunctionsArgs, ChatCompletionRequestFunctionMessageArgs,
         ChatCompletionRequestSystemMessageArgs, ChatCompletionRequestUserMessageArgs,
-        ChatCompletionToolArgs, ChatCompletionToolType, CreateChatCompletionRequestArgs,
-        FinishReason, Role,
+        ChatCompletionToolArgs, ChatCompletionToolChoiceOption, ChatCompletionToolType,
+        CreateChatCompletionRequestArgs, FinishReason, Role,
     },
     Client,
 };
@@ -126,9 +126,10 @@ pub async fn run_gpt(
     let request = CreateChatCompletionRequestArgs::default()
         .max_tokens(512u16)
         // .model("gpt-3.5-turbo-0613")
-        .model("gpt-4-0613")
+        .model("gpt-3.5-turbo-1106")
         .messages(messages.clone())
         .tools(tools)
+        .tool_choice(ChatCompletionToolChoiceOption::Auto)
         .build()?;
 
     let chat = client.chat().create(request).await?;
@@ -155,10 +156,10 @@ pub async fn run_gpt(
                     let city = &argument_obj["city"];
                     send_message_to_channel(workspace, channel, city.clone()).await;
 
-               let res =      get_weather(&argument_obj["city"].to_string());
-               send_message_to_channel(workspace, channel, res.clone()).await;
+                    let res = get_weather(&argument_obj["city"].to_string());
+                    send_message_to_channel(workspace, channel, res.clone()).await;
 
-            res
+                    res
                 }
                 "scraper" => {
                     let argument_obj =
@@ -187,7 +188,7 @@ pub async fn run_gpt(
         .chat()
         .create(
             CreateChatCompletionRequestArgs::default()
-                .model("gpt-4-0613")
+                .model("gpt-3.5-turbo-0613")
                 .messages(messages)
                 .build()?,
         )
