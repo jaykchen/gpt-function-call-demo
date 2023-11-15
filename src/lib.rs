@@ -133,9 +133,7 @@ pub async fn run_gpt(
 
     let chat = client.chat().create(request).await?;
 
-    let check = chat.choices[0].message.tool_calls.clone();
-
-    send_message_to_channel(workspace, channel, format!("{:?}", check)).await;
+    // send_message_to_channel(workspace, channel, format!("{:?}", check)).await;
 
     let wants_to_use_function = chat
         .choices
@@ -143,15 +141,11 @@ pub async fn run_gpt(
         .map(|choice| choice.finish_reason == Some(FinishReason::FunctionCall))
         .unwrap_or(false);
 
-    log::info!("wants_to_use_function: {}", wants_to_use_function);
-
     if wants_to_use_function {
         let tool_calls = chat.choices[0].message.tool_calls.as_ref().unwrap();
 
         for tool_call in tool_calls {
             let function = &tool_call.function;
-            let content_str = function.name.clone();
-            send_message_to_channel(workspace, channel, content_str).await;
 
             let content = match function.name.as_str() {
                 "getWeather" => {
@@ -159,9 +153,12 @@ pub async fn run_gpt(
                         serde_json::from_str::<HashMap<String, String>>(&function.arguments)?;
 
                     let city = &argument_obj["city"];
-                    log::info!("city: {}", city);
+                    send_message_to_channel(workspace, channel, city.clone()).await;
 
-                    get_weather(&argument_obj["city"].clone())
+               let res =      get_weather(&argument_obj["city"].to_string());
+               send_message_to_channel(workspace, channel, res.clone()).await;
+
+            res
                 }
                 "scraper" => {
                     let argument_obj =
