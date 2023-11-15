@@ -149,10 +149,13 @@ pub async fn run_gpt(
         .map(|choice| choice.finish_reason == Some(FinishReason::FunctionCall))
         .unwrap_or(false);
 
+    let mut messages_log = String::new();
+
     if wants_to_use_function {
         let message_ojb = chat.choices[0].message.clone();
 
-        send_message_to_channel(workspace, channel, format!("{:?}", message_ojb)).await;
+        let resp_1_msg = format!("1st resp: {:?}", message_ojb);
+        messages_log.push_str(&resp_1_msg);
         let tool_calls = chat.choices[0].message.tool_calls.as_ref().unwrap();
 
         for tool_call in tool_calls {
@@ -164,10 +167,9 @@ pub async fn run_gpt(
                         serde_json::from_str::<HashMap<String, String>>(&function.arguments)?;
 
                     let city = &argument_obj["city"];
-                    send_message_to_channel(workspace, channel, city.clone()).await;
 
                     let res = get_weather(&argument_obj["city"].to_string());
-                    send_message_to_channel(workspace, channel, res.clone()).await;
+                    messages_log.push_str(&res);
 
                     res
                 }
@@ -176,11 +178,16 @@ pub async fn run_gpt(
                         serde_json::from_str::<HashMap<String, String>>(&function.arguments)?;
 
                     let url = &argument_obj["url"];
-                    log::info!("url: {}", url);
 
-                    scraper(argument_obj["url"].clone()).await
+                    let res = scraper(argument_obj["url"].clone()).await;
+                    messages_log.push_str(&res);
+                    res
                 }
-                "getTimeOfDay" => get_time_of_day(),
+                "getTimeOfDay" => {
+                    let res = get_time_of_day();
+                    messages_log.push_str(&res);
+                    res
+                }
                 _ => "".to_string(),
             };
             messages.push(
@@ -193,6 +200,7 @@ pub async fn run_gpt(
             );
         }
     }
+    send_message_to_channel(workspace, channel, messages_log).await;
 
     let response_after_func_run = client
         .chat()
