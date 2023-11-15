@@ -130,15 +130,15 @@ pub async fn run_gpt(
         .model("gpt-3.5-turbo-1106")
         .messages(messages.clone())
         .tools(tools)
-        .tool_choice(ChatCompletionToolChoiceOption::Named(
-            ChatCompletionNamedToolChoice {
-                r#type: ChatCompletionToolType::Function,
-                function: FunctionName {
-                    name: "getWeather".to_string(),
-                },
-            },
-        ))
-        // .tool_choice(ChatCompletionToolChoiceOption::Auto)
+        // .tool_choice(ChatCompletionToolChoiceOption::Named(
+        //     ChatCompletionNamedToolChoice {
+        //         r#type: ChatCompletionToolType::Function,
+        //         function: FunctionName {
+        //             name: "getWeather".to_string(),
+        //         },
+        //     },
+        // ))
+        .tool_choice(ChatCompletionToolChoiceOption::Auto)
         .build()?;
 
     let chat = client.chat().create(request).await?;
