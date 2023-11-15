@@ -131,24 +131,11 @@ pub async fn run_gpt(
         .tools(tools)
         .build()?;
 
-    let chat = match client.chat().create(request).await {
-        Ok(chat) => chat,
-        Err(e) => {
-            send_message_to_channel(workspace, channel, e.to_string()).await;
-            return Ok(());
-        }
-    };
+    let chat = client.chat().create(request).await?;
 
-    let check = chat.choices.clone();
+    let check = chat.choices[0].message.tool_calls.clone();
 
-    for choice in check {
-        let choice_string = choice.message.content.unwrap_or_default().to_string();
-        send_message_to_channel(workspace, channel, choice_string).await;
-    }
-
-    for reason in chat.choices.get(0).clone().unwrap().finish_reason.as_ref() {
-        send_message_to_channel(workspace, channel, format!("{:?}", reason)).await;
-    }
+    send_message_to_channel(workspace, channel, format!("{:?}", check)).await;
 
     let wants_to_use_function = chat
         .choices
