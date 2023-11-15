@@ -1,9 +1,10 @@
 use async_openai::{
     types::{
-        ChatCompletionFunctionsArgs, ChatCompletionRequestFunctionMessageArgs,
-        ChatCompletionRequestSystemMessageArgs, ChatCompletionRequestUserMessageArgs,
-        ChatCompletionToolArgs, ChatCompletionToolChoiceOption, ChatCompletionToolType,
-        CreateChatCompletionRequestArgs, FinishReason, Role,
+        ChatCompletionFunctionsArgs, ChatCompletionNamedToolChoice,
+        ChatCompletionRequestFunctionMessageArgs, ChatCompletionRequestSystemMessageArgs,
+        ChatCompletionRequestUserMessageArgs, ChatCompletionToolArgs,
+        ChatCompletionToolChoiceOption, ChatCompletionToolType, CreateChatCompletionRequestArgs,
+        FinishReason, Role,
     },
     Client,
 };
@@ -129,12 +130,18 @@ pub async fn run_gpt(
         .model("gpt-3.5-turbo-1106")
         .messages(messages.clone())
         .tools(tools)
-        .tool_choice(ChatCompletionToolChoiceOption::Auto)
+        // .tool_choice(ChatCompletionToolChoiceOption::Named(
+        //     ChatCompletionNamedToolChoice {
+        //         r#type: "function".to_string(),
+        //         function: ChatCompletionFunctionChoice {
+        //             name: "getWeather".to_string(),
+        //         },
+        //     },
+        // ))
+        // .tool_choice(ChatCompletionToolChoiceOption::Auto)
         .build()?;
 
     let chat = client.chat().create(request).await?;
-
-    // send_message_to_channel(workspace, channel, format!("{:?}", check)).await;
 
     let wants_to_use_function = chat
         .choices
@@ -143,6 +150,9 @@ pub async fn run_gpt(
         .unwrap_or(false);
 
     if wants_to_use_function {
+        let message_ojb = chat.choices[0].message.clone();
+
+        send_message_to_channel(workspace, channel, format!("{:?}", message_ojb)).await;
         let tool_calls = chat.choices[0].message.tool_calls.as_ref().unwrap();
 
         for tool_call in tool_calls {
