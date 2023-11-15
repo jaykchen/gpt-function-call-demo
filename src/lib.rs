@@ -4,7 +4,7 @@ use async_openai::{
         ChatCompletionRequestFunctionMessageArgs, ChatCompletionRequestSystemMessageArgs,
         ChatCompletionRequestUserMessageArgs, ChatCompletionToolArgs,
         ChatCompletionToolChoiceOption, ChatCompletionToolType, CreateChatCompletionRequestArgs,
-        FinishReason, Role,
+        FinishReason, FunctionName, Role,
     },
     Client,
 };
@@ -130,14 +130,14 @@ pub async fn run_gpt(
         .model("gpt-3.5-turbo-1106")
         .messages(messages.clone())
         .tools(tools)
-        // .tool_choice(ChatCompletionToolChoiceOption::Named(
-        //     ChatCompletionNamedToolChoice {
-        //         r#type: "function".to_string(),
-        //         function: ChatCompletionFunctionChoice {
-        //             name: "getWeather".to_string(),
-        //         },
-        //     },
-        // ))
+        .tool_choice(ChatCompletionToolChoiceOption::Named(
+            ChatCompletionNamedToolChoice {
+                r#type: ChatCompletionToolType::Function,
+                function: FunctionName {
+                    name: "getWeather".to_string(),
+                },
+            },
+        ))
         // .tool_choice(ChatCompletionToolChoiceOption::Auto)
         .build()?;
 
