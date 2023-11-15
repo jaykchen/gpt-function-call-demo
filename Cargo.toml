@@ -9,7 +9,7 @@ crate-type = ["cdylib"]
 
 [dependencies]
 anyhow = "1.0.75"
-async-openai-wasi = "0.0.2"
+async-openai-wasi = "0.16.2"
 chrono = "0.4.31"
 dotenv = "0.15.0"
 serde_json = "1"
