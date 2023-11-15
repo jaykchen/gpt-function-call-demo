@@ -146,6 +146,10 @@ pub async fn run_gpt(
         send_message_to_channel(workspace, channel, choice_string).await;
     }
 
+    for reason in chat.choices.get(0).clone().unwrap().finish_reason.as_ref() {
+        send_message_to_channel(workspace, channel, format!("{:?}", reason)).await;
+    }
+
     let wants_to_use_function = chat
         .choices
         .get(0)
