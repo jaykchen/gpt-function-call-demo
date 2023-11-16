@@ -270,7 +270,7 @@ pub async fn chat_inner(
     let wants_to_use_function = chat
         .choices
         .get(0)
-        .map(|choice| choice.finish_reason == Some(FinishReason::FunctionCall))
+        .map(|choice| choice.finish_reason == Some(FinishReason::ToolCalls))
         .unwrap_or(false);
 
     let check = chat.choices.get(0).clone().unwrap();
