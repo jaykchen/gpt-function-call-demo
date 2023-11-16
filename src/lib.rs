@@ -290,6 +290,7 @@ pub async fn chat_inner(
                     let city = &argument_obj["city"];
 
                     let res = get_weather(&argument_obj["city"].to_string());
+                    send_message_to_channel("ik8", "general", res.clone()).await;
 
                     res
                 }
