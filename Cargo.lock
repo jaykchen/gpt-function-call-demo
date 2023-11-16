@@ -504,10 +504,12 @@ dependencies = [
  "dotenv",
  "flowsnet-platform-sdk",
  "http_req_wasi 0.11.1",
+ "lazy_static",
  "log",
  "serde",
  "serde_json",
  "slack-flows",
+ "store-flows",
  "tokio_wasi",
  "web-scraper-flows",
 ]
@@ -1146,6 +1148,19 @@ checksum = "9f7916fc008ca5542385b89a3d3ce689953c143e9304a9bf8beec1de48994c0d"
 dependencies = [
  "libc",
  "winapi",
+]
+
+[[package]]
+name = "store-flows"
+version = "0.3.1"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "2fa902aee6cfd59f317b55a21bc46e516c7621251614ed7b6f220cf4fd85da56"
+dependencies = [
+ "http_req_wasi 0.10.2",
+ "lazy_static",
+ "serde",
+ "serde_json",
+ "urlencoding",
 ]
 
 [[package]]

@@ -1,10 +1,11 @@
 use async_openai::{
     types::{
         ChatCompletionFunctionsArgs, ChatCompletionNamedToolChoice,
-        ChatCompletionRequestFunctionMessageArgs, ChatCompletionRequestSystemMessageArgs,
-        ChatCompletionRequestUserMessageArgs, ChatCompletionToolArgs,
+        ChatCompletionRequestFunctionMessageArgs, ChatCompletionRequestMessage,
+        ChatCompletionRequestSystemMessageArgs, ChatCompletionRequestToolMessageArgs,
+        ChatCompletionRequestUserMessageArgs, ChatCompletionTool, ChatCompletionToolArgs,
         ChatCompletionToolChoiceOption, ChatCompletionToolType, CreateChatCompletionRequestArgs,
-        FinishReason, FunctionName, Role,
+        CreateChatCompletionResponse, FinishReason, FunctionName, Role,
     },
     Client,
 };
@@ -15,12 +16,102 @@ use http_req::{
     request::{Method, Request},
     uri::Uri,
 };
+use lazy_static::lazy_static;
 use serde::Deserialize;
 use serde_json::json;
 use slack_flows::{listen_to_channel, send_message_to_channel};
 use std::collections::HashMap;
 use std::env;
+use store_flows::{del, get, set};
 use web_scraper_flows::get_page_text;
+
+lazy_static! {
+    pub static ref TOOLS: Vec<ChatCompletionTool> = {
+        let mut tools = Vec::new();
+        tools.push(
+            ChatCompletionToolArgs::default()
+                .r#type(ChatCompletionToolType::Function)
+                .function(
+                    ChatCompletionFunctionsArgs::default()
+                        .name("getWeather")
+                        .description("Get weather forecast for the city passed to it")
+                        .parameters(json!({
+                            "type": "object",
+                            "properties": {
+                                "city": {
+                                    "type": "string",
+                                    "description": "The city specified by the user",
+                                },
+                            },
+                            "required": ["city"],
+                        }))
+                        .build()
+                        .expect("Failed to build getWeather function"),
+                )
+                .build()
+                .expect("Failed to build getWeather tool"),
+        );
+        tools.push(
+            ChatCompletionToolArgs::default()
+                .r#type(ChatCompletionToolType::Function)
+                .function(
+                    ChatCompletionFunctionsArgs::default()
+                        .name("scraper")
+                        .description(
+                            "Get the text content of the webpage from the url passed to it",
+                        )
+                        .parameters(json!({
+                            "type": "object",
+                            "properties": {
+                                "url": {
+                                    "type": "string",
+                                    "description": "The url from which to fetch the content",
+                                },
+                            },
+                            "required": ["url"],
+                        }))
+                        .build()
+                        .expect("Failed to build scraper function"),
+                )
+                .build()
+                .expect("Failed to build scraper tool"),
+        );
+        tools.push(
+            ChatCompletionToolArgs::default()
+                .r#type(ChatCompletionToolType::Function)
+                .function(
+                    ChatCompletionFunctionsArgs::default()
+                        .name("getTimeOfDay")
+                        .description("Get the time of day.")
+                        .parameters(json!({
+                            "type": "object",
+                            "properties": {},
+                            "required": [],
+                        }))
+                        .build()
+                        .expect("Failed to build getTimeOfDay function"),
+                )
+                .build()
+                .expect("Failed to build getTimeOfDay tool"),
+        );
+
+        tools
+    };
+}
+
+lazy_static! {
+    pub static ref MESSAGES: Vec<ChatCompletionRequestMessage> = {
+        let mut messages = Vec::new();
+        messages.push(
+            ChatCompletionRequestSystemMessageArgs::default()
+                .content("Perform function requests for the user")
+                .build()
+                .expect("Failed to build system message")
+                .into(),
+        );
+        messages
+    };
+}
 
 #[no_mangle]
 #[tokio::main(flavor = "current_thread")]
@@ -39,190 +130,32 @@ async fn run() {
 #[no_mangle]
 async fn handler(workspace: &str, channel: &str, msg: String) {
     let trigger_word = env::var("trigger_word").unwrap_or("tool_calls".to_string());
+    let mut global_messages = MESSAGES.clone();
+    let mut out = String::new();
+    let mut user_input = String::new();
 
-    match msg.starts_with(&trigger_word) {
-        false => {}
+    if msg.starts_with(&trigger_word) {
+        user_input = msg.replace(&trigger_word, "").to_string();
 
-        true => {
-            let user_input = msg.replace(&trigger_word, "").to_string();
-
-            let _ = run_gpt(workspace, channel, user_input).await;
+        set("in_chat", json!(true), None);
+    } else {
+        if !get("in_chat").unwrap().as_bool().unwrap() {
+            return;
         }
+        user_input = msg;
     }
-}
-
-pub async fn run_gpt(
-    workspace: &str,
-    channel: &str,
-    user_input: String,
-) -> Result<(), Box<dyn std::error::Error>> {
-    let client = Client::new();
-    let mut messages = vec![
-        ChatCompletionRequestSystemMessageArgs::default()
-            .content("Perform function requests for the user")
-            .build()?
-            .into(),
-        ChatCompletionRequestUserMessageArgs::default()
-            .content(user_input)
-            // .content("Hello, I am a user, I would like to know the time of day now")
-            .build()?
-            .into(),
-    ];
-
-    let tools = vec![
-        ChatCompletionToolArgs::default()
-            .r#type(ChatCompletionToolType::Function)
-            .function(
-                ChatCompletionFunctionsArgs::default()
-                    .name("getWeather")
-                    .description("Get weather forecast for the city passed to it")
-                    .parameters(json!({
-                        "type": "object",
-                        "properties": {
-                            "city": {
-                                "type": "string",
-                                "description": "The city specified by the user",
-                            },
-                        },
-                        "required": ["city"],
-                    }))
-                    .build()?,
-            )
-            .build()?,
-        ChatCompletionToolArgs::default()
-            .r#type(ChatCompletionToolType::Function)
-            .function(
-                ChatCompletionFunctionsArgs::default()
-                    .name("scraper")
-                    .description("Get the text content of the webpage from the url passed to it")
-                    .parameters(json!({
-                        "type": "object",
-                        "properties": {
-                            "url": {
-                                "type": "string",
-                                "description": "The url from which to fetch the content",
-                            },
-                        },
-                        "required": ["url"],
-                    }))
-                    .build()?,
-            )
-            .build()?,
-        ChatCompletionToolArgs::default()
-            .r#type(ChatCompletionToolType::Function)
-            .function(
-                ChatCompletionFunctionsArgs::default()
-                    .name("getTimeOfDay")
-                    .description("Get the time of day.")
-                    .parameters(json!({
-                        "type": "object",
-                        "properties": {},
-                        "required": [],
-                    }))
-                    .build()?,
-            )
-            .build()?,
-    ];
-
-    let request = CreateChatCompletionRequestArgs::default()
-        .max_tokens(512u16)
-        // .model("gpt-3.5-turbo-0613")
-        .model("gpt-3.5-turbo-1106")
-        .messages(messages.clone())
-        .tools(tools)
-        // .tool_choice(ChatCompletionToolChoiceOption::Named(
-        //     ChatCompletionNamedToolChoice {
-        //         r#type: ChatCompletionToolType::Function,
-        //         function: FunctionName {
-        //             name: "getWeather".to_string(),
-        //         },
-        //     },
-        // ))
-        .tool_choice(ChatCompletionToolChoiceOption::Auto)
-        .build()?;
-
-    let chat = client.chat().create(request).await?;
-
-    let wants_to_use_function = chat
-        .choices
-        .get(0)
-        .map(|choice| choice.finish_reason == Some(FinishReason::FunctionCall))
-        .unwrap_or(false);
-
-    let mut messages_log = String::new();
-
-    if wants_to_use_function {
-        let message_ojb = chat.choices[0].message.clone();
-
-        let resp_1_msg = format!("1st resp: {:?}", message_ojb);
-        messages_log.push_str(&resp_1_msg);
-        let tool_calls = chat.choices[0].message.tool_calls.as_ref().unwrap();
-
-        for tool_call in tool_calls {
-            let function = &tool_call.function;
-
-            let content = match function.name.as_str() {
-                "getWeather" => {
-                    let argument_obj =
-                        serde_json::from_str::<HashMap<String, String>>(&function.arguments)?;
-
-                    let city = &argument_obj["city"];
-
-                    let res = get_weather(&argument_obj["city"].to_string());
-                    messages_log.push_str(&res);
-
-                    res
-                }
-                "scraper" => {
-                    let argument_obj =
-                        serde_json::from_str::<HashMap<String, String>>(&function.arguments)?;
-
-                    let url = &argument_obj["url"];
-
-                    let res = scraper(argument_obj["url"].clone()).await;
-                    messages_log.push_str(&res);
-                    res
-                }
-                "getTimeOfDay" => {
-                    let res = get_time_of_day();
-                    messages_log.push_str(&res);
-                    res
-                }
-                _ => "".to_string(),
-            };
-            messages.push(
-                ChatCompletionRequestFunctionMessageArgs::default()
-                    .role(Role::Function)
-                    .name(function.name.clone())
-                    .content(content)
-                    .build()?
-                    .into(),
-            );
+    match chat_inner(user_input, &mut global_messages, TOOLS.clone()).await {
+        Ok(Some(output)) => {
+            out = output;
         }
+        Ok(None) => {
+            del("in_chat");
+            return;
+        }
+        _ => {}
     }
-    send_message_to_channel(workspace, channel, messages_log).await;
 
-    let response_after_func_run = client
-        .chat()
-        .create(
-            CreateChatCompletionRequestArgs::default()
-                .model("gpt-3.5-turbo-0613")
-                .messages(messages)
-                .build()?,
-        )
-        .await?;
-
-    let res = response_after_func_run
-        .choices
-        .get(0)
-        .unwrap()
-        .message
-        .clone()
-        .content
-        .unwrap_or("no result".to_string());
-    send_message_to_channel(workspace, channel, res).await;
-
-    Ok(())
+    send_message_to_channel(workspace, channel, out).await;
 }
 
 fn get_weather(city: &str) -> String {
@@ -310,4 +243,99 @@ fn get_weather_inner(city: &str) -> Option<ApiResult> {
         }
     };
     None
+}
+
+pub async fn chat_inner(
+    user_input: String,
+    messages: &mut Vec<ChatCompletionRequestMessage>,
+    tools: Vec<ChatCompletionTool>,
+) -> Result<Option<String>, Box<dyn std::error::Error>> {
+    let client = Client::new();
+    let user_msg_obj = ChatCompletionRequestUserMessageArgs::default()
+        .content(user_input)
+        .build()?
+        .into();
+
+    messages.push(user_msg_obj);
+
+    let request = CreateChatCompletionRequestArgs::default()
+        .max_tokens(512u16)
+        .model("gpt-3.5-turbo-1106")
+        .messages(messages.clone())
+        .tools(TOOLS.clone())
+        .build()?;
+
+    let chat = client.chat().create(request).await?;
+
+    let wants_to_use_function = chat
+        .choices
+        .get(0)
+        .map(|choice| choice.finish_reason == Some(FinishReason::FunctionCall))
+        .unwrap_or(false);
+
+    if wants_to_use_function {
+        let tool_calls = chat.choices[0].message.tool_calls.as_ref().unwrap();
+
+        for tool_call in tool_calls {
+            let function = &tool_call.function;
+
+            let content = match function.name.as_str() {
+                "getWeather" => {
+                    del("in_chat");
+                    let argument_obj =
+                        serde_json::from_str::<HashMap<String, String>>(&function.arguments)?;
+                    let city = &argument_obj["city"];
+
+                    let res = get_weather(&argument_obj["city"].to_string());
+
+                    res
+                }
+                "scraper" => {
+                    del("in_chat");
+
+                    let argument_obj =
+                        serde_json::from_str::<HashMap<String, String>>(&function.arguments)?;
+                    let url = &argument_obj["url"];
+                    log::info!("url: {}", url);
+
+                    scraper(argument_obj["url"].clone()).await
+                }
+                "getTimeOfDay" => {
+                    del("in_chat");
+                    get_time_of_day()
+                }
+                _ => "".to_string(),
+            };
+            messages.push(
+                ChatCompletionRequestFunctionMessageArgs::default()
+                    .role(Role::Function)
+                    .name(function.name.clone())
+                    .content(content)
+                    .build()?
+                    .into(),
+            );
+        }
+    }
+
+    let response_inner_last = client
+        .chat()
+        .create(
+            CreateChatCompletionRequestArgs::default()
+                .model("gpt-3.5-turbo-1106")
+                .messages(messages.clone())
+                .build()?,
+        )
+        .await?;
+
+    match response_inner_last
+        .choices
+        .get(0)
+        .unwrap()
+        .message
+        .clone()
+        .content
+    {
+        Some(res) => Ok(Some(res)),
+        None => Ok(None),
+    }
 }
