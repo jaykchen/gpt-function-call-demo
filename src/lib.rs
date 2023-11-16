@@ -273,6 +273,9 @@ pub async fn chat_inner(
         .map(|choice| choice.finish_reason == Some(FinishReason::FunctionCall))
         .unwrap_or(false);
 
+    let check = chat.choices.get(0).clone().unwrap();
+    send_message_to_channel("ik8", "general", format!("{:?}", check)).await;
+
     if wants_to_use_function {
         let tool_calls = chat.choices[0].message.tool_calls.as_ref().unwrap();
 
