@@ -17,13 +17,27 @@ use http_req::{
     uri::Uri,
 };
 use lazy_static::lazy_static;
+use once_cell::sync::Lazy;
 use serde::Deserialize;
 use serde_json::json;
 use slack_flows::{listen_to_channel, send_message_to_channel};
 use std::collections::HashMap;
 use std::env;
 use store_flows::{del, get, set};
+use tokio::sync::Mutex;
 use web_scraper_flows::get_page_text;
+
+static MESSAGES: Lazy<Mutex<Vec<ChatCompletionRequestMessage>>> = Lazy::new(|| {
+    let mut messages = Vec::new();
+    messages.push(
+        ChatCompletionRequestSystemMessageArgs::default()
+            .content("Perform function requests for the user")
+            .build()
+            .expect("Failed to build system message")
+            .into(),
+    );
+    Mutex::new(messages)
+});
 
 lazy_static! {
     pub static ref TOOLS: Vec<ChatCompletionTool> = {
@@ -99,20 +113,6 @@ lazy_static! {
     };
 }
 
-lazy_static! {
-    pub static ref MESSAGES: Vec<ChatCompletionRequestMessage> = {
-        let mut messages = Vec::new();
-        messages.push(
-            ChatCompletionRequestSystemMessageArgs::default()
-                .content("Perform function requests for the user")
-                .build()
-                .expect("Failed to build system message")
-                .into(),
-        );
-        messages
-    };
-}
-
 #[no_mangle]
 #[tokio::main(flavor = "current_thread")]
 async fn run() {
@@ -130,7 +130,6 @@ async fn run() {
 #[no_mangle]
 async fn handler(workspace: &str, channel: &str, msg: String) {
     let trigger_word = env::var("trigger_word").unwrap_or("tool_calls".to_string());
-    let mut global_messages = MESSAGES.clone();
     let mut out = String::new();
     let mut user_input = String::new();
 
@@ -139,12 +138,13 @@ async fn handler(workspace: &str, channel: &str, msg: String) {
 
         set("in_chat", json!(true), None);
     } else {
-        if !get("in_chat").unwrap().as_bool().unwrap() {
+        if !get("in_chat").unwrap_or(json!("false")).as_bool().unwrap() {
             return;
         }
         user_input = msg;
     }
-    match chat_inner(user_input, &mut global_messages, TOOLS.clone()).await {
+    let mut global_messages = MESSAGES.lock().await;
+    match chat_inner(user_input, &mut *global_messages, TOOLS.clone()).await {
         Ok(Some(output)) => {
             out = output;
         }
