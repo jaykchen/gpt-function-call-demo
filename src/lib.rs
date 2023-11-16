@@ -1,11 +1,9 @@
 use async_openai::{
     types::{
-        ChatCompletionFunctionsArgs, ChatCompletionNamedToolChoice,
-        ChatCompletionRequestFunctionMessageArgs, ChatCompletionRequestMessage,
-        ChatCompletionRequestSystemMessageArgs, ChatCompletionRequestToolMessageArgs,
-        ChatCompletionRequestUserMessageArgs, ChatCompletionTool, ChatCompletionToolArgs,
-        ChatCompletionToolChoiceOption, ChatCompletionToolType, CreateChatCompletionRequestArgs,
-        CreateChatCompletionResponse, FinishReason, FunctionName, Role,
+        ChatCompletionFunctionsArgs, ChatCompletionRequestMessage,
+        ChatCompletionRequestSystemMessageArgs, ChatCompletionRequestUserMessageArgs,
+        ChatCompletionTool, ChatCompletionToolArgs, ChatCompletionToolType,
+        CreateChatCompletionRequestArgs, FinishReason,
     },
     Client,
 };
@@ -144,7 +142,7 @@ async fn handler(workspace: &str, channel: &str, msg: String) {
         user_input = msg;
     }
     let mut global_messages = MESSAGES.lock().await;
-    match chat_inner(user_input, &mut *global_messages, TOOLS.clone()).await {
+    match chat_inner(user_input, &mut *global_messages).await {
         Ok(Some(output)) => {
             out = output;
         }
@@ -193,7 +191,12 @@ async fn scraper(url: String) -> String {
 
 fn get_time_of_day() -> String {
     let now = Local::now();
-    now.to_rfc3339()
+    format!(
+        "{:02}:{:02} {}",
+        now.hour12().1,
+        now.minute(),
+        if now.hour12().0 { "p.m." } else { "a.m." }
+    )
 }
 
 #[derive(Deserialize, Debug)]
@@ -248,7 +251,6 @@ fn get_weather_inner(city: &str) -> Option<ApiResult> {
 pub async fn chat_inner(
     user_input: String,
     messages: &mut Vec<ChatCompletionRequestMessage>,
-    tools: Vec<ChatCompletionTool>,
 ) -> Result<Option<String>, Box<dyn std::error::Error>> {
     let client = Client::new();
     let user_msg_obj = ChatCompletionRequestUserMessageArgs::default()
@@ -287,7 +289,6 @@ pub async fn chat_inner(
                     del("in_chat");
                     let argument_obj =
                         serde_json::from_str::<HashMap<String, String>>(&function.arguments)?;
-                    let city = &argument_obj["city"];
 
                     get_weather(&argument_obj["city"].to_string())
                 }
@@ -296,7 +297,6 @@ pub async fn chat_inner(
 
                     let argument_obj =
                         serde_json::from_str::<HashMap<String, String>>(&function.arguments)?;
-                    let url = &argument_obj["url"];
 
                     scraper(argument_obj["url"].clone()).await
                 }
