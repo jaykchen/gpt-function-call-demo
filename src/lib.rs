@@ -273,8 +273,8 @@ pub async fn chat_inner(
         .map(|choice| choice.finish_reason == Some(FinishReason::ToolCalls))
         .unwrap_or(false);
 
-    let check = chat.choices.get(0).clone().unwrap();
-    send_message_to_channel("ik8", "general", format!("{:?}", check)).await;
+    // let check = chat.choices.get(0).clone().unwrap();
+    // send_message_to_channel("ik8", "general", format!("{:?}", check)).await;
 
     if wants_to_use_function {
         let tool_calls = chat.choices[0].message.tool_calls.as_ref().unwrap();
@@ -289,10 +289,7 @@ pub async fn chat_inner(
                         serde_json::from_str::<HashMap<String, String>>(&function.arguments)?;
                     let city = &argument_obj["city"];
 
-                    let res = get_weather(&argument_obj["city"].to_string());
-                    send_message_to_channel("ik8", "general", res.clone()).await;
-
-                    res
+                    get_weather(&argument_obj["city"].to_string())
                 }
                 "scraper" => {
                     del("in_chat");
@@ -300,7 +297,6 @@ pub async fn chat_inner(
                     let argument_obj =
                         serde_json::from_str::<HashMap<String, String>>(&function.arguments)?;
                     let url = &argument_obj["url"];
-                    log::info!("url: {}", url);
 
                     scraper(argument_obj["url"].clone()).await
                 }
@@ -310,35 +306,19 @@ pub async fn chat_inner(
                 }
                 _ => "".to_string(),
             };
-            messages.push(
-                ChatCompletionRequestFunctionMessageArgs::default()
-                    .role(Role::Function)
-                    .name(function.name.clone())
-                    .content(content)
-                    .build()?
-                    .into(),
-            );
+            return Ok(Some(content));
+            // messages.push(
+            //     ChatCompletionRequestFunctionMessageArgs::default()
+            //         .role(Role::Function)
+            //         .name(function.name.clone())
+            //         .content(content)
+            //         .build()?
+            //         .into(),
+            // );
         }
     }
 
-    let response_inner_last = client
-        .chat()
-        .create(
-            CreateChatCompletionRequestArgs::default()
-                .model("gpt-3.5-turbo-1106")
-                .messages(messages.clone())
-                .build()?,
-        )
-        .await?;
-
-    match response_inner_last
-        .choices
-        .get(0)
-        .unwrap()
-        .message
-        .clone()
-        .content
-    {
+    match chat.choices[0].message.clone().content {
         Some(res) => Ok(Some(res)),
         None => Ok(None),
     }
